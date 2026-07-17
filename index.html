@@ -1,35 +1,191 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
+// ===============================
+// Create Map
+// ===============================
 
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+var map = L.map('map', {
+    fullscreenControl: true
+}).setView([7.2, 80.5], 8);
 
-<title>Kalu Ganga Basin Map</title>
+// ===============================
+// Base Maps
+// ===============================
 
-<link rel="stylesheet"
-href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+// OpenStreetMap
+var osm = L.tileLayer(
+    'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+    {
+        attribution: '© OpenStreetMap'
+    }
+).addTo(map);
 
-<link rel="stylesheet"
-href="https://unpkg.com/leaflet.fullscreen@2.4.0/Control.FullScreen.css"/>
+// Satellite
+var satellite = L.tileLayer(
+    'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+    {
+        attribution: 'Esri'
+    }
+);
 
-<link rel="stylesheet" href="style.css">
+// Basemap Control
+var baseMaps = {
+    "OpenStreetMap": osm,
+    "Satellite": satellite
+};
 
-</head>
+// Scale Bar
+L.control.scale().addTo(map);
 
-<body>
+// ===============================
+// Layer Styles
+// ===============================
 
-<header>
-<h2>Kalu Ganga Basin Map</h2>
-</header>
+function basinStyle(feature) {
+    return {
+        color: "#003366",
+        weight: 2,
+        fillColor: "#4CAF50",
+        fillOpacity: 0.5
+    };
+}
 
-<div id="map"></div>
+function contourStyle(feature) {
+    return {
+        color: "#8B4513",
+        weight: 1,
+        fillOpacity: 0
+    };
+}
 
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+function riverStyle(feature) {
+    return {
+        color: "#0066FF",
+        weight: 3
+    };
+}
 
-<script src="https://unpkg.com/leaflet.fullscreen@2.4.0/Control.FullScreen.js"></script>
+// ===============================
+// Highlight
+// ===============================
 
-<script src="script.js"></script>
+function highlightFeature(e) {
+    var layer = e.target;
 
-</body>
-</html>
+    layer.setStyle({
+        weight: 4,
+        color: "#ff0000"
+    });
+
+    layer.bringToFront();
+}
+
+// ===============================
+// Popup
+// ===============================
+
+function onEachFeature(feature, layer) {
+
+    var html = "";
+
+    for (var key in feature.properties) {
+        html += "<b>" + key + "</b> : " +
+            feature.properties[key] +
+            "<br>";
+    }
+
+    layer.bindPopup(html);
+
+}
+
+// ===============================
+// Empty Layer Variables
+// ===============================
+
+var basinLayer;
+var contourLayer;
+var incidentLayer;
+var kalugangaLayer;
+var rainGaugeLayer;
+
+// ===============================
+// Load All GeoJSON Files
+// ===============================
+
+Promise.all([
+    fetch("data/Basin.json").then(r => r.json()),
+    fetch("data/Contour.json").then(r => r.json()),
+    fetch("data/Incident.json").then(r => r.json()),
+    fetch("data/Kaluganga.json").then(r => r.json()),
+    fetch("data/Rainguage.json").then(r => r.json())
+])
+
+.then(([basin, contour, incident, kaluganga, raingauge]) => {
+
+    // Basin
+    basinLayer = L.geoJSON(basin, {
+        style: basinStyle,
+        onEachFeature: onEachFeature
+    }).addTo(map);
+
+    // Contours
+    contourLayer = L.geoJSON(contour, {
+        style: contourStyle,
+        onEachFeature: onEachFeature
+    });
+
+    // Rivers
+    kalugangaLayer = L.geoJSON(kaluganga, {
+        style: riverStyle,
+        onEachFeature: onEachFeature
+    });
+
+    // Landslide Incidents
+    incidentLayer = L.geoJSON(incident, {
+
+        pointToLayer: function (feature, latlng) {
+            return L.circleMarker(latlng, {
+                radius: 6,
+                fillColor: "red",
+                color: "black",
+                weight: 1,
+                opacity: 1,
+                fillOpacity: 0.9
+            });
+        },
+
+        onEachFeature: onEachFeature
+
+    });
+
+    // Rain Gauges
+    rainGaugeLayer = L.geoJSON(raingauge, {
+
+        pointToLayer: function (feature, latlng) {
+            return L.circleMarker(latlng, {
+                radius: 6,
+                fillColor: "blue",
+                color: "white",
+                weight: 1,
+                opacity: 1,
+                fillOpacity: 0.9
+            });
+        },
+
+        onEachFeature: onEachFeature
+
+    });
+
+    // Zoom to Basin
+    map.fitBounds(basinLayer.getBounds());
+
+    // Layer Control
+    var overlayMaps = {
+        "Basin": basinLayer,
+        "Contour": contourLayer,
+        "Kaluganga": kalugangaLayer,
+        "Incident": incidentLayer,
+        "Rain Gauge": rainGaugeLayer
+    };
+
+    L.control.layers(baseMaps, overlayMaps).addTo(map);
+
+});
